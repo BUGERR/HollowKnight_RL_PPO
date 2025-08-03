@@ -9,3 +9,11 @@
 - 黑冲，下砸实现：用 sb3_contrib 的 MaskablePPO，实现 action_masks 方法。
 - 奖励分数：玩家血量，boss血量，结束额外奖惩。
 - 先学了 2w step，
+
+<div style="text-align: center;">
+  <img src="./images/reward.png" alt="reward" style="width: auto; height: auto;">
+</div>
+
+<div style="text-align: center;">
+  <img src="./images/loss.png" alt="loss" style="width: auto; height: auto;">
+</div>
