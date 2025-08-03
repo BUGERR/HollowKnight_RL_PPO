@@ -81,7 +81,6 @@ def get_frame_grey():
         
     return gray
 
-
 #---------------------------------------------------------------------
 
 def boss_hp_bar_exists():
@@ -271,14 +270,14 @@ class HpXy_getter():
                     return BOSS_MAX_HP
 
 
-    # def get_boss_xy(self):
-    #     boss_x_address = self.get_address_unity(self.boss_x_offsets)
-    #     boss_y_address = self.get_address_unity(self.boss_y_offsets)
+    def get_boss_xy(self):
+        boss_x_address = self.get_address_unity(self.boss_x_offsets)
+        boss_y_address = self.get_address_unity(self.boss_y_offsets)
 
-    #     boss_x = self.pm.read_float(boss_x_address)
-    #     boss_y = self.pm.read_float(boss_y_address)
+        boss_x = self.pm.read_float(boss_x_address)
+        boss_y = self.pm.read_float(boss_y_address)
 
-    #     return boss_x, boss_y
+        return boss_x, boss_y
 
 
 #---------------------------------------------------------------------

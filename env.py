@@ -6,12 +6,12 @@ from utils import get_frame_rgb, HpXy_getter, restart, boss_hp_bar_exists
 import time
 
 from Actions import *
-from Reward import player_hp_reward, boss_hp_reward, done_reward
+from Reward import player_hp_reward, boss_hp_reward, done_reward, move_direction_reward, move_range_reward
 
 import cv2
 
 
-IMG_SIZE = 128
+IMG_SIZE = 224
 NUM_FRAME = 4
 
 NUM_MOVE = 4
@@ -39,10 +39,8 @@ class HollowKnightEnv(gymnasium.Env):
         self.image_shape = (IMG_SIZE, IMG_SIZE, 3, NUM_FRAME)
 
         self.action_space = spaces.MultiDiscrete([NUM_MOVE, NUM_ATTACK])
-        self.observation_space = spaces.Dict({
-            "image": spaces.Box(low=0, high=255, shape=(IMG_SIZE, IMG_SIZE, 3 * NUM_FRAME), dtype=np.uint8), 
-            "vector": spaces.Box(low=0.0, high=1.0, shape=(NUM_STATE,), dtype=np.float32),
-        })
+        self.observation_space = spaces.Box(low=0, high=255, shape=(IMG_SIZE, IMG_SIZE, 3 * NUM_FRAME), dtype=np.uint8)
+        
         self.frame_stack = np.zeros(self.image_shape, dtype=np.uint8)
 
         self.prev_state = None
@@ -82,13 +80,15 @@ class HollowKnightEnv(gymnasium.Env):
 
         self.boss_hp_bar = False
 
+        self.epoch_reward = 0
+
     
     def _get_frame(self):
         frame = get_frame_rgb()
         frame_resized = cv2.resize(frame, (IMG_SIZE, IMG_SIZE))
         return frame_resized.astype(np.uint8)
 
-    # ------ 帧栈更新 ------
+    # # ------ 帧栈更新 ------
     def _update_stack(self, new_frame):
         # self.frame_stack = new_frame.copy()  # 重置为新帧
 
@@ -105,24 +105,30 @@ class HollowKnightEnv(gymnasium.Env):
         player_souls = getter.get_player_souls()
         player_shadow_dash_state = getter.get_player_dash_state()
 
+        boss_x, boss_y = getter.get_boss_xy()
+        player_x, player_y = getter.get_player_xy()
+
         state = {
             "player_hp": player_hp,
             "boss_hp": boss_hp,
             "player_souls": player_souls,
             "player_shadow_dash_state": player_shadow_dash_state,
+
+            "player_x": player_x,
+            "boss_x": boss_x,
         }
 
         return state
 
-    def _state_to_observation(self, state):
-        observation = np.array([
-            state["player_hp"] / PLAYER_MAX_HP, 
-            state["boss_hp"] / BOSS_MAX_HP, 
-            state["player_souls"] / PLAYER_MAX_SOULS,
-            state["player_shadow_dash_state"]
-        ], dtype=np.float32)
+    # def _state_to_observation(self, state):
+    #     observation = np.array([
+    #         state["player_hp"] / PLAYER_MAX_HP, 
+    #         state["boss_hp"] / BOSS_MAX_HP, 
+    #         state["player_souls"] / PLAYER_MAX_SOULS,
+    #         state["player_shadow_dash_state"]
+    #     ], dtype=np.float32)
 
-        return observation
+    #     return observation
     
 
     def _calculate_time(self):
@@ -133,17 +139,22 @@ class HollowKnightEnv(gymnasium.Env):
         # self.time_step += 1
 
 
-    def _get_action_mask(self, raw_state):
-        action_mask = np.ones(NUM_ATTACK, dtype=bool)
+    def action_masks(self):
+        attack_mask = np.ones(NUM_ATTACK, dtype=bool)
+
+        raw_state = self.prev_state
 
         # 根据状态更新动作掩码
         if raw_state["player_shadow_dash_state"] == NORMAL_DASH_STATE:
-            action_mask[self.ATTACK.index("Dash")] = 0
+            attack_mask[self.ATTACK.index("Dash")] = 0
         
         if raw_state["player_souls"] < SKILL_SOULS_COST:
-            # action_mask[self.ATTACK.index("Skill")] = 0
-            # action_mask[self.ATTACK.index("Skill_Up")] = 0
-            action_mask[self.ATTACK.index("Skill_Down")] = 0
+            # attack_mask[self.ATTACK.index("Skill")] = 0
+            # attack_mask[self.ATTACK.index("Skill_Up")] = 0
+            attack_mask[self.ATTACK.index("Skill_Down")] = 0
+        
+        move_mask = np.ones(NUM_MOVE, dtype=bool)
+        action_mask = np.concatenate([move_mask, attack_mask])
 
         return action_mask
 
@@ -159,6 +170,8 @@ class HollowKnightEnv(gymnasium.Env):
 
         self.boss_hp_bar = False
 
+        self.epoch_reward = 0
+
         self.frame_stack.fill(0)
         frame = self._get_frame()
         for _ in range(NUM_FRAME):
@@ -168,33 +181,15 @@ class HollowKnightEnv(gymnasium.Env):
         self.prev_state = raw_state
 
         image_observation = self.frame_stack.copy().reshape(IMG_SIZE, IMG_SIZE, 3 * NUM_FRAME)
-        vector_observation = self._state_to_observation(raw_state)
+        # vector_observation = self._state_to_observation(raw_state)
 
-        self.action_mask = self._get_action_mask(raw_state)
 
-        observation = {
-            "image": image_observation,
-            "vector": vector_observation,
-        }
+        observation = image_observation
 
         return observation, {}
         
     def step(self, action):
         move_index, attack_index = action
-
-        attack_mask = self.action_mask
-
-        if attack_mask[attack_index] == 0:
-            self.time_step += 1
-            raw_state = self._get_state_vector()
-            new_frame = self._get_frame()
-            image_observation = self._update_stack(new_frame).reshape(IMG_SIZE, IMG_SIZE, 3 * NUM_FRAME)
-            vector_observation = self._state_to_observation(raw_state)
-            observation = {
-                "image": image_observation,
-                "vector": vector_observation,
-            }
-            return observation, -1.0, False, False, {}
         
         self.boss_hp_bar = boss_hp_bar_exists()
 
@@ -214,28 +209,25 @@ class HollowKnightEnv(gymnasium.Env):
 
         raw_state = self._get_state_vector()
 
-        # 更新 mask
-        self.action_mask = self._get_action_mask(raw_state)
-
         # 计算奖励
         reward, done = self._get_reward_done(raw_state, self.prev_state, action)
 
+        self.epoch_reward += reward
+
         # print(f" reward:{reward:.3f}, boss_hp:{raw_state['boss_hp']}, done:{done}")
         if done:
-            print(f"time_step:{self.time_step}, boss_hp:{raw_state['boss_hp']}")
+            print(f"time_step:{self.time_step}, boss_hp:{raw_state['boss_hp']}, epoch_reward:{self.epoch_reward:.3f}")
 
+     
         new_frame = self._get_frame()
         image_observation = self._update_stack(new_frame).reshape(IMG_SIZE, IMG_SIZE, 3 * NUM_FRAME)
-        vector_observation = self._state_to_observation(raw_state)
+        # vector_observation = self._state_to_observation(raw_state)
 
         self.prev_state = raw_state
 
 
-        observation = {
-            "image": image_observation,
-            "vector": vector_observation
-        }
-
+        observation = image_observation
+ 
         return observation, reward, done, False, {}
     
 
@@ -248,11 +240,14 @@ class HollowKnightEnv(gymnasium.Env):
         reward += player_hp_reward(player_hp=state["player_hp"], prev_player_hp=prev_state["player_hp"])
         reward += boss_hp_reward(boss_hp=state["boss_hp"], prev_boss_hp=prev_state["boss_hp"])
 
-        # reward += souls_reward(attack_index=attack_index, player_souls=state["player_souls"])
-        # reward += shadow_dash_reward(attack_index=attack_index, player_shadow_dash_state=state["player_shadow_dash_state"])
+        # reward += move_direction_reward(move_index=move_index, player_x=state["player_x"], boss_x=state["boss_x"])
+        reward += move_range_reward(player_x=state["player_x"], boss_x=state["boss_x"])
+
 
         if done:
-            reward += done_reward(boss_hp=state["boss_hp"], player_hp=state["player_hp"])
+            reward += done_reward(boss_hp=state["boss_hp"])
+
+        reward -= 0.1  # 每一步都惩罚一点，鼓励尽快结束战斗
 
         return reward, done
     
