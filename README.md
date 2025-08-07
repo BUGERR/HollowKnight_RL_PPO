@@ -33,3 +33,7 @@
 <div style="text-align: center;">
   <img src="./images/loss_8win.png" alt="loss" style="width: auto; height: auto;">
 </div>
+
+<div style="text-align: center;">
+  <img src="./images/result.png" alt="result" style="width: auto; height: auto;">
+</div>
