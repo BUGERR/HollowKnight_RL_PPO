@@ -40,4 +40,7 @@
 </div>
 
 ### 推荐阅读
-[Mitigating Cowardice for Reinforcement Learning](https://ieee-cog.org/2022/assets/papers/paper_111.pdf)
+[1] [DIAMBRA Arena A New Reinforcement Learning Platform for Research and Experimentation](https://arxiv.org/abs/2210.10595)
+关于格斗游戏深度强化学习模型超参数设置的经验总结
+[2] [Mitigating Cowardice for Reinforcement Learning](https://ieee-cog.org/2022/assets/papers/paper_111.pdf)
+提出的“惩罚衰减”机制解决了智能代理在游戏中的“怯懈”（始终回避对手，不敢尝试攻击）问题
